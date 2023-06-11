@@ -4,75 +4,87 @@
 #include <mutex>
 #include <ncurses.h>
 #include <unistd.h>
-#include <atomic>
-#include <cstdlib>
 #include <string>
 
-std::mutex mtx;
-std::atomic<bool> running(true);
+using namespace std;
 
 struct Shelf {
-    bool isOccupied = false;
-    int numberOfBooks = rand() % 10 + 1;
+    int numberOfBooks;
+    bool isOccupied;
 };
 
-std::vector<Shelf> shelves(5);
+const int NUMBER_OF_SHELVES = 5;
+const int NUMBER_OF_LIBRARIANS = 3;
+const int NUMBER_OF_READERS = 5;
+bool running = true;
 
-std::mutex computerMtx;
-std::atomic<bool> computerOccupied(false);
+vector<Shelf> shelves(NUMBER_OF_SHELVES, {10, false});
+vector<string> librarianStatus(NUMBER_OF_LIBRARIANS, "Free");
+vector<string> readerStatus(NUMBER_OF_READERS, "Not in library");
+bool computerOccupied = false;
 
-std::vector<std::string> librarianStatus(2, "Idle");
-std::vector<std::string> readerStatus(10, "Idle");
+mutex shelvesMutex[NUMBER_OF_SHELVES];
+mutex computerMutex;
 
-void librarian(int librarianID) {
+void librarian(int id) {
     while (running) {
-        librarianStatus[librarianID] = "Waiting for computer";
-        if (!computerOccupied) {
-            computerMtx.lock();
-            computerOccupied = true;
-            computerMtx.unlock();
-            
-            librarianStatus[librarianID] = "Using computer";
-            // Librarian uses the computer
-            sleep(rand() % 3 + 2);
+        for (int i = 0; i < NUMBER_OF_READERS; i++) {
+            if (readerStatus[i] == "Waiting for librarian") {
+                // Use computer station to check out the book for the reader
+                {
+                    lock_guard<mutex> lock(computerMutex);
+                    computerOccupied = true;
+                    librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
+                    sleep(2);
+                }
+                computerOccupied = false;
 
-            // Librarian done using computer
-            computerMtx.lock();
-            computerOccupied = false;
-            computerMtx.unlock();
-            librarianStatus[librarianID] = "Idle";
+                // Update status
+                librarianStatus[id] = "Free";
+                readerStatus[i] = "Leaving with book";
+                sleep(1);
+                readerStatus[i] = "Not in library";
+            }
         }
-
-        sleep(rand() % 3 + 1);
+        sleep(1);
     }
 }
 
-void reader(int readerID) {
+void reader(int id) {
     while (running) {
-        readerStatus[readerID] = "Looking for book";
-        int shelfNumber = rand() % shelves.size();
+        // Enter library and look for a book
+        readerStatus[id] = "Looking for book";
+        sleep(rand() % 3 + 1);
 
-        mtx.lock();
-        if (!shelves[shelfNumber].isOccupied && shelves[shelfNumber].numberOfBooks > 0) {
-            shelves[shelfNumber].isOccupied = true;
-            shelves[shelfNumber].numberOfBooks--;
-            mtx.unlock();
-            
-            readerStatus[readerID] = "Reading";
-            sleep(rand() % 3 + 2); // reading
+        // Try to take a book from a shelf
+        bool foundBook = false;
+        int shelfIndex = -1;
+        for (int i = 0; i < NUMBER_OF_SHELVES && !foundBook; i++) {
+            lock_guard<mutex> lock(shelvesMutex[i]);
+            if (!shelves[i].isOccupied && shelves[i].numberOfBooks > 0) {
+                shelves[i].isOccupied = true;
+                shelves[i].numberOfBooks--;
+                foundBook = true;
+                shelfIndex = i;
+            }
+        }
 
-            // Return the book
-            mtx.lock();
-            shelves[shelfNumber].numberOfBooks++;
-            shelves[shelfNumber].isOccupied = false;
-            mtx.unlock();
-            readerStatus[readerID] = "Idle";
+        // If found book, proceed to librarian
+        if (foundBook) {
+            readerStatus[id] = "Waiting for librarian";
+            sleep(5);
+
+            // Mark the shelf as unoccupied
+            lock_guard<mutex> lock(shelvesMutex[shelfIndex]);
+            shelves[shelfIndex].isOccupied = false;
         } else {
-            mtx.unlock();
+            readerStatus[id] = "Didn't find book";
+            sleep(2);
+            readerStatus[id] = "Not in library";
         }
-        sleep(rand() % 3 + 1);
     }
 }
+
 
 void monitoring() {
     initscr();
@@ -139,21 +151,30 @@ void monitoring() {
 
 
 int main() {
-    std::vector<std::thread> librarians;
-    for (int i = 0; i < 2; i++) {
-        librarians.push_back(std::thread(librarian, i));
+    vector<thread> librarians;
+    vector<thread> readers;
+
+    for (int i = 0; i < NUMBER_OF_LIBRARIANS; i++) {
+        librarians.push_back(thread(librarian, i));
     }
 
-    std::vector<std::thread> readers;
-    for (int i = 0; i < 10; i++) {
-        readers.push_back(std::thread(reader, i));
+    for (int i = 0; i < NUMBER_OF_READERS; i++) {
+        readers.push_back(thread(reader, i));
     }
 
-    std::thread monitor(monitoring);
+    thread monitoringThread(monitoring);
 
-    monitor.join();
-    for (auto& lib : librarians) lib.join();
-    for (auto& reader : readers) reader.join();
-    
+    // Wait for the monitoring thread to finish (e.g. when user presses a key)
+    monitoringThread.join();
+
+    // Stop librarian and reader threads
+    running = false;
+    for (auto& t : librarians) {
+        t.join();
+    }
+    for (auto& t : readers) {
+        t.join();
+    }
+
     return 0;
 }
