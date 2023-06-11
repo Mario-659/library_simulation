@@ -76,29 +76,58 @@ void reader(int readerID) {
 
 void monitoring() {
     initscr();
+    start_color(); // Allows the usage of colors
+
+    // Define color pairs
+    init_pair(1, COLOR_GREEN, COLOR_BLACK); // Free shelf
+    init_pair(2, COLOR_RED, COLOR_BLACK); // Occupied shelf
+    init_pair(3, COLOR_YELLOW, COLOR_BLACK); // Computer status
+    init_pair(4, COLOR_CYAN, COLOR_BLACK); // Librarian status
+    init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // Reader status
+    init_pair(6, COLOR_WHITE, COLOR_BLACK); // Headers
+
     nodelay(stdscr, TRUE);
     noecho();
     curs_set(0);
 
     while (running) {
         clear();
+        attron(COLOR_PAIR(6)); // Set header color
         printw("LIBRARY SIMULATION\n\n");
+        attroff(COLOR_PAIR(6)); // Turn off header color
 
+        attron(COLOR_PAIR(6)); // Set header color
         printw("Shelves Status:\n");
+        attroff(COLOR_PAIR(6)); // Turn off header color
         for (size_t i = 0; i < shelves.size(); i++) {
+            attron(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1)); // Set color based on shelf status
             printw("Shelf %ld: %s, Number of Books: %d\n", i + 1, shelves[i].isOccupied ? "Occupied" : "Free", shelves[i].numberOfBooks);
+            attroff(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1)); // Turn off color
         }
 
-        printw("\nComputer Station: %s\n", computerOccupied ? "Occupied" : "Free");
-        
+        attron(COLOR_PAIR(6)); // Set header color
+        printw("\nComputer Station: ");
+        attroff(COLOR_PAIR(6)); // Turn off header color
+        attron(COLOR_PAIR(3)); // Set computer color
+        printw("%s\n", computerOccupied ? "Occupied" : "Free");
+        attroff(COLOR_PAIR(3)); // Turn off computer color
+
+        attron(COLOR_PAIR(6)); // Set header color
         printw("\nLibrarians Status:\n");
+        attroff(COLOR_PAIR(6)); // Turn off header color
         for (size_t i = 0; i < librarianStatus.size(); i++) {
+            attron(COLOR_PAIR(4)); // Set librarian color
             printw("Librarian %ld: %s\n", i + 1, librarianStatus[i].c_str());
+            attroff(COLOR_PAIR(4)); // Turn off librarian color
         }
-        
+
+        attron(COLOR_PAIR(6)); // Set header color
         printw("\nReaders Status:\n");
+        attroff(COLOR_PAIR(6)); // Turn off header color
         for (size_t i = 0; i < readerStatus.size(); i++) {
+            attron(COLOR_PAIR(5)); // Set reader color
             printw("Reader %ld: %s\n", i + 1, readerStatus[i].c_str());
+            attroff(COLOR_PAIR(5)); // Turn off reader color
         }
 
         refresh();
@@ -107,6 +136,7 @@ void monitoring() {
 
     endwin();
 }
+
 
 int main() {
     std::vector<std::thread> librarians;
