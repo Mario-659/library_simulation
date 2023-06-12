@@ -5,21 +5,29 @@
 #include <ncurses.h>
 #include <unistd.h>
 #include <string>
+#include <atomic>
 
 using namespace std;
-
-struct Shelf {
-    int numberOfBooks;
-    bool isOccupied;
-};
 
 const int NUMBER_OF_SHELVES = 5;
 const int NUMBER_OF_LIBRARIANS = 3;
 const int NUMBER_OF_READERS = 5;
-const int NUMBER_OF_COMPUTER_STATIONS = 3;
+const int NUMBER_OF_COMPUTER_STATIONS = 2;
+const int MAX_BOOKS_PER_SHELF = 20;
+const int SIMULATION_TIME_SECONDS = 30;
+
+struct Shelf {
+    int numberOfBooks;
+    int maxNumberOfBooks;
+    bool isOccupied;
+    Shelf() : numberOfBooks(10), maxNumberOfBooks(MAX_BOOKS_PER_SHELF), isOccupied(false) {}
+};
+
+atomic<int> totalBooks(NUMBER_OF_SHELVES * 10);
+
 bool running = true;
 
-vector<Shelf> shelves(NUMBER_OF_SHELVES, {10, false});
+vector<Shelf> shelves(NUMBER_OF_SHELVES, Shelf());
 vector<string> librarianStatus(NUMBER_OF_LIBRARIANS, "Free");
 vector<string> readerStatus(NUMBER_OF_READERS, "Not in library");
 int computerStationsOccupied = 0; // <- Replace computerOccupied with an integer counter
@@ -29,7 +37,8 @@ mutex computerStationsMutex; // <- Single mutex for the computer stations
 
 void librarian(int id) {
     while (running) {
-        for (int i = 0; i < NUMBER_OF_READERS; i++) {
+        bool didWork = false;
+        for (int i = 0; i < NUMBER_OF_READERS && !didWork; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
                 bool usingComputer = false;
                 // Mark the reader as being helped
@@ -60,6 +69,21 @@ void librarian(int id) {
                 }
             }
         }
+
+        // Restocking shelves if free
+        if (!didWork) {
+            for (int i = 0; i < NUMBER_OF_SHELVES && !didWork; i++) {
+                lock_guard<mutex> lock(shelvesMutex[i]);
+                if (!shelves[i].isOccupied && shelves[i].numberOfBooks < shelves[i].maxNumberOfBooks) {
+                    librarianStatus[id] = "Restocking shelf " + to_string(i + 1);
+                    shelves[i].numberOfBooks++;
+                    totalBooks++;
+                    didWork = true;
+                    sleep(1);
+                }
+            }
+        }
+
         sleep(1);
     }
 }
@@ -97,6 +121,15 @@ void reader(int id) {
             sleep(2);
             readerStatus[id] = "Not in library";
         }
+
+        // Randomly decide if this reader will return a book
+        if (rand() % 2 == 0 && foundBook) {
+            readerStatus[id] = "Returning book";
+            lock_guard<mutex> lock(shelvesMutex[shelfIndex]);
+            shelves[shelfIndex].numberOfBooks++;
+            totalBooks++;
+            sleep(1);
+        }
     }
 }
 
@@ -122,6 +155,13 @@ void monitoring() {
         attron(COLOR_PAIR(6)); // Set header color
         printw("LIBRARY SIMULATION\n\n");
         attroff(COLOR_PAIR(6)); // Turn off header color
+
+        attron(COLOR_PAIR(6)); // Set header color
+        printw("\nTotal Number of Books: ");
+        attroff(COLOR_PAIR(6)); // Turn off header color
+        attron(COLOR_PAIR(3)); // Set color
+        printw("%d\n", totalBooks.load());
+        attroff(COLOR_PAIR(3)); // Turn off color
 
         attron(COLOR_PAIR(6)); // Set header color
         printw("Shelves Status:\n");
