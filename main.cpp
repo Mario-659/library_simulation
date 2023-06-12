@@ -16,33 +16,36 @@ struct Shelf {
 const int NUMBER_OF_SHELVES = 5;
 const int NUMBER_OF_LIBRARIANS = 3;
 const int NUMBER_OF_READERS = 5;
+const int NUMBER_OF_COMPUTER_STATIONS = 3;
 bool running = true;
 
 vector<Shelf> shelves(NUMBER_OF_SHELVES, {10, false});
 vector<string> librarianStatus(NUMBER_OF_LIBRARIANS, "Free");
 vector<string> readerStatus(NUMBER_OF_READERS, "Not in library");
-bool computerOccupied = false;
+int computerStationsOccupied = 0; // <- Replace computerOccupied with an integer counter
 
 mutex shelvesMutex[NUMBER_OF_SHELVES];
-mutex computerMutex;
+mutex computerStationsMutex; // <- Single mutex for the computer stations
 
 void librarian(int id) {
     while (running) {
         for (int i = 0; i < NUMBER_OF_READERS; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
-                // Use computer station to check out the book for the reader
+                // Use computer station to check out the book for the reader if one is available
                 {
-                    lock_guard<mutex> lock(computerMutex);
-                    computerOccupied = true;
-                    librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
-                    sleep(2);
+                    lock_guard<mutex> lock(computerStationsMutex);
+                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS) {
+                        computerStationsOccupied++;
+                        librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
+                        sleep(1);
+                        computerStationsOccupied--;
+                    }
                 }
-                computerOccupied = false;
 
                 // Update status
                 librarianStatus[id] = "Free";
                 readerStatus[i] = "Leaving with book";
-                sleep(1);
+                sleep(2);
                 readerStatus[i] = "Not in library";
             }
         }
@@ -118,10 +121,10 @@ void monitoring() {
         }
 
         attron(COLOR_PAIR(6)); // Set header color
-        printw("\nComputer Station: ");
+        printw("\nComputer Stations: ");
         attroff(COLOR_PAIR(6)); // Turn off header color
         attron(COLOR_PAIR(3)); // Set computer color
-        printw("%s\n", computerOccupied ? "Occupied" : "Free");
+        printw("%d/%d\n", computerStationsOccupied, NUMBER_OF_COMPUTER_STATIONS);
         attroff(COLOR_PAIR(3)); // Turn off computer color
 
         attron(COLOR_PAIR(6)); // Set header color
