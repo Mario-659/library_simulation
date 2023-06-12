@@ -31,27 +31,39 @@ void librarian(int id) {
     while (running) {
         for (int i = 0; i < NUMBER_OF_READERS; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
-                // Use computer station to check out the book for the reader if one is available
+                bool usingComputer = false;
+                // Mark the reader as being helped
                 {
                     lock_guard<mutex> lock(computerStationsMutex);
-                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS) {
+                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS && readerStatus[i] == "Waiting for librarian") {
                         computerStationsOccupied++;
-                        librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
-                        sleep(1);
-                        computerStationsOccupied--;
+                        usingComputer = true;
+                        readerStatus[i] = "Being helped";
                     }
                 }
 
-                // Update status
-                librarianStatus[id] = "Free";
-                readerStatus[i] = "Leaving with book";
-                sleep(2);
-                readerStatus[i] = "Not in library";
+                if (usingComputer) {
+                    librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
+                    sleep(1);
+
+                    // Decrement the counter for occupied computer stations
+                    {
+                        lock_guard<mutex> lock(computerStationsMutex);
+                        computerStationsOccupied--;
+                    }
+
+                    // Update status
+                    librarianStatus[id] = "Free";
+                    readerStatus[i] = "Leaving with book";
+                    sleep(2);
+                    readerStatus[i] = "Not in library";
+                }
             }
         }
         sleep(1);
     }
 }
+
 
 void reader(int id) {
     while (running) {
