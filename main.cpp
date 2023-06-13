@@ -53,7 +53,7 @@ void librarian(int id) {
 
                 if (usingComputer) {
                     librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
-                    sleep(1);
+                    sleep(rand() % 2 + 1);
 
                     
                     {
