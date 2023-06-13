@@ -9,9 +9,9 @@
 
 using namespace std;
 
-const int NUMBER_OF_SHELVES = 5;
+const int NUMBER_OF_SHELVES = 6;
 const int NUMBER_OF_LIBRARIANS = 3;
-const int NUMBER_OF_READERS = 5;
+const int NUMBER_OF_READERS = 7;
 const int NUMBER_OF_COMPUTER_STATIONS = 2;
 const int MAX_BOOKS_PER_SHELF = 20;
 const int SIMULATION_TIME_SECONDS = 30;
@@ -83,13 +83,13 @@ void librarian(int id) {
                 }
             }
         }
-
-        sleep(1);
     }
 }
 
 
 void reader(int id) {
+    sleep(rand() % 3 + 1);
+
     while (running) {
         // Enter library and look for a book
         readerStatus[id] = "Looking for book";
@@ -198,7 +198,7 @@ void monitoring() {
         }
 
         refresh();
-        sleep(1);
+        usleep(500000);
     }
 
     endwin();
@@ -219,10 +219,8 @@ int main() {
 
     thread monitoringThread(monitoring);
 
-    // Wait for the monitoring thread to finish (e.g. when user presses a key)
     monitoringThread.join();
 
-    // Stop librarian and reader threads
     running = false;
     for (auto& t : librarians) {
         t.join();
