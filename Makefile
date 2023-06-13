@@ -1,2 +1,2 @@
 all:
-	g++ main.cpp -o projekt -lncurses -pthread
+	g++ main.cpp -o library -lncurses -pthread
