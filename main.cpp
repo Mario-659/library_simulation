@@ -30,10 +30,10 @@ bool running = true;
 vector<Shelf> shelves(NUMBER_OF_SHELVES, Shelf());
 vector<string> librarianStatus(NUMBER_OF_LIBRARIANS, "Free");
 vector<string> readerStatus(NUMBER_OF_READERS, "Not in library");
-int computerStationsOccupied = 0; // <- Replace computerOccupied with an integer counter
+int computerStationsOccupied = 0;
 
 mutex shelvesMutex[NUMBER_OF_SHELVES];
-mutex computerStationsMutex; // <- Single mutex for the computer stations
+mutex computerStationsMutex;
 
 void librarian(int id) {
     while (running) {
@@ -41,7 +41,7 @@ void librarian(int id) {
         for (int i = 0; i < NUMBER_OF_READERS && !didWork; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
                 bool usingComputer = false;
-                // Mark the reader as being helped
+                
                 {
                     lock_guard<mutex> lock(computerStationsMutex);
                     if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS && readerStatus[i] == "Waiting for librarian") {
@@ -55,13 +55,13 @@ void librarian(int id) {
                     librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
                     sleep(1);
 
-                    // Decrement the counter for occupied computer stations
+                    
                     {
                         lock_guard<mutex> lock(computerStationsMutex);
                         computerStationsOccupied--;
                     }
 
-                    // Update status
+                    
                     librarianStatus[id] = "Free";
                     readerStatus[i] = "Leaving with book";
                     sleep(2);
@@ -70,7 +70,7 @@ void librarian(int id) {
             }
         }
 
-        // Restocking shelves if free
+        // restocking shelves if free
         if (!didWork) {
             for (int i = 0; i < NUMBER_OF_SHELVES && !didWork; i++) {
                 lock_guard<mutex> lock(shelvesMutex[i]);
@@ -88,14 +88,12 @@ void librarian(int id) {
 
 
 void reader(int id) {
-    sleep(rand() % 3 + 1);
+    // sleep(rand() % 3 + 1);
 
     while (running) {
-        // Enter library and look for a book
         readerStatus[id] = "Looking for book";
         sleep(rand() % 3 + 1);
 
-        // Try to take a book from a shelf
         bool foundBook = false;
         int shelfIndex = -1;
         for (int i = 0; i < NUMBER_OF_SHELVES && !foundBook; i++) {
@@ -120,6 +118,8 @@ void reader(int id) {
             readerStatus[id] = "Didn't find book";
             sleep(2);
             readerStatus[id] = "Not in library";
+            sleep(rand() % 3 + 1);
+            continue;
         }
 
         // Randomly decide if this reader will return a book
@@ -136,15 +136,14 @@ void reader(int id) {
 
 void monitoring() {
     initscr();
-    start_color(); // Allows the usage of colors
+    start_color();
 
-    // Define color pairs
-    init_pair(1, COLOR_GREEN, COLOR_BLACK); // Free shelf
-    init_pair(2, COLOR_RED, COLOR_BLACK); // Occupied shelf
-    init_pair(3, COLOR_YELLOW, COLOR_BLACK); // Computer status
-    init_pair(4, COLOR_CYAN, COLOR_BLACK); // Librarian status
-    init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // Reader status
-    init_pair(6, COLOR_WHITE, COLOR_BLACK); // Headers
+    init_pair(1, COLOR_GREEN, COLOR_BLACK);
+    init_pair(2, COLOR_RED, COLOR_BLACK);
+    init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(4, COLOR_CYAN, COLOR_BLACK);
+    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(6, COLOR_WHITE, COLOR_BLACK);
 
     nodelay(stdscr, TRUE);
     noecho();
@@ -152,49 +151,49 @@ void monitoring() {
 
     while (running) {
         clear();
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("LIBRARY SIMULATION\n\n");
-        attroff(COLOR_PAIR(6)); // Turn off header color
+        attroff(COLOR_PAIR(6));
 
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("\nTotal Number of Books: ");
-        attroff(COLOR_PAIR(6)); // Turn off header color
-        attron(COLOR_PAIR(3)); // Set color
+        attroff(COLOR_PAIR(6));
+        attron(COLOR_PAIR(3));
         printw("%d\n", totalBooks.load());
-        attroff(COLOR_PAIR(3)); // Turn off color
+        attroff(COLOR_PAIR(3));
 
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("Shelves Status:\n");
-        attroff(COLOR_PAIR(6)); // Turn off header color
+        attroff(COLOR_PAIR(6));
         for (size_t i = 0; i < shelves.size(); i++) {
-            attron(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1)); // Set color based on shelf status
+            attron(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1));
             printw("Shelf %ld: %s, Number of Books: %d\n", i + 1, shelves[i].isOccupied ? "Occupied" : "Free", shelves[i].numberOfBooks);
-            attroff(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1)); // Turn off color
+            attroff(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1));
         }
 
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("\nComputer Stations: ");
-        attroff(COLOR_PAIR(6)); // Turn off header color
-        attron(COLOR_PAIR(3)); // Set computer color
+        attroff(COLOR_PAIR(6));
+        attron(COLOR_PAIR(3));
         printw("%d/%d\n", computerStationsOccupied, NUMBER_OF_COMPUTER_STATIONS);
-        attroff(COLOR_PAIR(3)); // Turn off computer color
+        attroff(COLOR_PAIR(3));
 
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("\nLibrarians Status:\n");
-        attroff(COLOR_PAIR(6)); // Turn off header color
+        attroff(COLOR_PAIR(6));
         for (size_t i = 0; i < librarianStatus.size(); i++) {
-            attron(COLOR_PAIR(4)); // Set librarian color
+            attron(COLOR_PAIR(4));
             printw("Librarian %ld: %s\n", i + 1, librarianStatus[i].c_str());
-            attroff(COLOR_PAIR(4)); // Turn off librarian color
+            attroff(COLOR_PAIR(4));
         }
 
-        attron(COLOR_PAIR(6)); // Set header color
+        attron(COLOR_PAIR(6));
         printw("\nReaders Status:\n");
-        attroff(COLOR_PAIR(6)); // Turn off header color
+        attroff(COLOR_PAIR(6));
         for (size_t i = 0; i < readerStatus.size(); i++) {
-            attron(COLOR_PAIR(5)); // Set reader color
+            attron(COLOR_PAIR(5));
             printw("Reader %ld: %s\n", i + 1, readerStatus[i].c_str());
-            attroff(COLOR_PAIR(5)); // Turn off reader color
+            attroff(COLOR_PAIR(5));
         }
 
         refresh();
