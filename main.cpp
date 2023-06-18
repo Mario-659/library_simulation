@@ -15,6 +15,7 @@ const int NUMBER_OF_SHELVES = 6;
 const int NUMBER_OF_LIBRARIANS = 3;
 const int NUMBER_OF_READERS = 7;
 const int NUMBER_OF_COMPUTER_STATIONS = 2;
+const int INITIAL_BOOKS_PER_GENRE = 2;
 const int MAX_BOOKS_PER_GENRE = 5;
 const int SIMULATION_TIME_SECONDS = 30;
 
@@ -24,12 +25,12 @@ struct Shelf {
     unordered_map<string, int> booksPerGenre;
     Shelf() {
         for (const auto& genre : genres) {
-            booksPerGenre[genre] = MAX_BOOKS_PER_GENRE;
+            booksPerGenre[genre] = INITIAL_BOOKS_PER_GENRE;
         }
     }
 };
 
-atomic<int> totalBooks(NUMBER_OF_SHELVES * genres.size() * MAX_BOOKS_PER_GENRE);
+atomic<int> totalBooks(NUMBER_OF_SHELVES * genres.size() * INITIAL_BOOKS_PER_GENRE);
 
 bool running = true;
 
@@ -41,6 +42,7 @@ int computerStationsOccupied = 0;
 mutex shelvesMutex[NUMBER_OF_SHELVES];
 mutex computerStationsMutex;
 
+atomic<int> readersWhoDidntFindBooks(0);
 
 void librarian(int id) {
     while (running) {
@@ -84,7 +86,7 @@ void librarian(int id) {
             string randomGenre = genres[rand() % genres.size()];
 
             lock_guard<mutex> lock(shelvesMutex[randomShelf]);
-            if (shelves[randomShelf].booksPerGenre[randomGenre] < MAX_BOOKS_PER_GENRE) {
+            if (shelves[randomShelf].booksPerGenre[randomGenre] < MAX_BOOKS_PER_GENRE && rand() % 2) {
                 librarianStatus[id] = "Restocking shelf " + to_string(randomShelf + 1) + " with genre " + randomGenre;
                 shelves[randomShelf].booksPerGenre[randomGenre]++;
                 totalBooks++;
@@ -102,26 +104,28 @@ void reader(int id) {
         readerStatus[id] = "Looking for books";
         sleep(rand() % 3 + 1);
 
-        int booksToRent = rand() % 3 + 1; // Rent 1 to 3 books
-        vector<string> genresToRent;
-        for (int i = 0; i < booksToRent; ++i) {
-            genresToRent.push_back(genres[rand() % genres.size()]);
+        // Create a map to store genres and the number of books the reader wants to rent
+        unordered_map<string, int> booksToRent;
+        for (int i = 0; i < rand() % genres.size(); ++i) {
+            booksToRent[genres[rand() % genres.size()]] = rand() % 5 + 1;
         }
 
         bool foundAllBooks = true;
-        vector<int> shelfIndices;
+        vector<pair<int, string>> shelfIndices;
 
-        for (const auto& genre : genresToRent) {
-            bool foundBook = false;
-            for (int i = 0; i < NUMBER_OF_SHELVES && !foundBook; i++) {
+        for (const auto& [genre, numBooks] : booksToRent) {
+            int foundBooks = 0;
+            // Loop through shelves to find the books
+            for (int i = 0; i < NUMBER_OF_SHELVES && foundBooks < numBooks; i++) {
                 lock_guard<mutex> lock(shelvesMutex[i]);
-                if (shelves[i].booksPerGenre[genre] > 0) {
+                // Loop to find the number of copies the reader needs
+                while (shelves[i].booksPerGenre[genre] > 0 && foundBooks < numBooks) {
                     shelves[i].booksPerGenre[genre]--;
-                    foundBook = true;
-                    shelfIndices.push_back(i);
+                    foundBooks++;
+                    shelfIndices.push_back({i, genre});
                 }
             }
-            if (!foundBook) {
+            if (foundBooks < numBooks) {
                 foundAllBooks = false;
                 break;
             }
@@ -132,15 +136,16 @@ void reader(int id) {
             sleep(5);
 
             // Return the books to the shelves
-            for (int index : shelfIndices) {
+            for (auto [index, genre] : shelfIndices) {
                 lock_guard<mutex> lock(shelvesMutex[index]);
-                shelves[index].booksPerGenre[genresToRent[rand() % genresToRent.size()]]++;
+                shelves[index].booksPerGenre[genre]++;
                 totalBooks++;
             }
         } else {
             readerStatus[id] = "Didn't find all books";
             sleep(2);
             readerStatus[id] = "Not in library";
+            readersWhoDidntFindBooks++;
             sleep(rand() % 3 + 1);
             continue;
         }
@@ -179,6 +184,7 @@ void monitoring() {
         printw("LIBRARY SIMULATION\n\n");
         attroff(COLOR_PAIR(6));
 
+        // Display total number of books
         attron(COLOR_PAIR(6));
         printw("\nTotal Number of Books: ");
         attroff(COLOR_PAIR(6));
@@ -186,13 +192,23 @@ void monitoring() {
         printw("%d\n", totalBooks.load());
         attroff(COLOR_PAIR(3));
 
+        // Display number of waiting readers
         attron(COLOR_PAIR(6));
         printw("Number of waiting readers: ");
         attroff(COLOR_PAIR(6));
         attron(COLOR_PAIR(2));
-        printw("%d\n\n", getNumberOfWaitingReaders());
+        printw("%d", getNumberOfWaitingReaders());
         attroff(COLOR_PAIR(2));
 
+        // Display number of readers who didn't find all books and returned home
+        attron(COLOR_PAIR(6));
+        printw("\nNumber of readers who didn't find all books and returned home: ");
+        attroff(COLOR_PAIR(6));
+        attron(COLOR_PAIR(2));
+        printw("%d\n\n", readersWhoDidntFindBooks.load());
+        attroff(COLOR_PAIR(2));
+
+        // Display shelves status
         attron(COLOR_PAIR(6));
         printw("Shelves Status:\n");
         attroff(COLOR_PAIR(6));
@@ -212,6 +228,7 @@ void monitoring() {
             printw("|\n");
         }
 
+        // Display computer stations status
         attron(COLOR_PAIR(6));
         printw("\nComputer Stations: ");
         attroff(COLOR_PAIR(6));
@@ -219,6 +236,7 @@ void monitoring() {
         printw("%d/%d\n", computerStationsOccupied, NUMBER_OF_COMPUTER_STATIONS);
         attroff(COLOR_PAIR(3));
 
+        // Display librarians status
         attron(COLOR_PAIR(6));
         printw("\nLibrarians Status:\n");
         attroff(COLOR_PAIR(6));
@@ -228,6 +246,7 @@ void monitoring() {
             attroff(COLOR_PAIR(4));
         }
 
+        // Display readers status
         attron(COLOR_PAIR(6));
         printw("\nReaders Status:\n");
         attroff(COLOR_PAIR(6));
@@ -238,11 +257,11 @@ void monitoring() {
         }
 
         refresh();
-        usleep(500000);
+        sleep(1);
     }
-
     endwin();
 }
+
 
 
 
