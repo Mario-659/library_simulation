@@ -147,6 +147,16 @@ void reader(int id) {
     }
 }
 
+int getNumberOfWaitingReaders() {
+    int count = 0;
+    for (const auto &status : readerStatus) {
+        if (status == "Waiting for librarian") {
+            count++;
+        }
+    }
+    return count;
+}
+
 
 void monitoring() {
     initscr();
@@ -175,6 +185,13 @@ void monitoring() {
         attron(COLOR_PAIR(3));
         printw("%d\n", totalBooks.load());
         attroff(COLOR_PAIR(3));
+
+        attron(COLOR_PAIR(6));
+        printw("Number of waiting readers: ");
+        attroff(COLOR_PAIR(6));
+        attron(COLOR_PAIR(2));
+        printw("%d\n\n", getNumberOfWaitingReaders());
+        attroff(COLOR_PAIR(2));
 
         attron(COLOR_PAIR(6));
         printw("Shelves Status:\n");
