@@ -1,3 +1,4 @@
+#include <iomanip>
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -21,8 +22,7 @@ vector<string> genres = {"Fiction", "Non-fiction", "Sci-Fi", "Fantasy", "Romance
 
 struct Shelf {
     unordered_map<string, int> booksPerGenre;
-    bool isOccupied;
-    Shelf() : isOccupied(false) {
+    Shelf() {
         for (const auto& genre : genres) {
             booksPerGenre[genre] = MAX_BOOKS_PER_GENRE;
         }
@@ -45,13 +45,15 @@ mutex computerStationsMutex;
 void librarian(int id) {
     while (running) {
         bool didWork = false;
+
+        // Checking for readers that are waiting for help
         for (int i = 0; i < NUMBER_OF_READERS && !didWork; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
                 bool usingComputer = false;
                 
                 {
                     lock_guard<mutex> lock(computerStationsMutex);
-                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS && readerStatus[i] == "Waiting for librarian") {
+                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS) {
                         computerStationsOccupied++;
                         usingComputer = true;
                         readerStatus[i] = "Being helped";
@@ -62,46 +64,40 @@ void librarian(int id) {
                     librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
                     sleep(rand() % 2 + 1);
 
-                    
                     {
                         lock_guard<mutex> lock(computerStationsMutex);
                         computerStationsOccupied--;
                     }
 
-                    
                     librarianStatus[id] = "Free";
                     readerStatus[i] = "Leaving with book";
                     sleep(2);
                     readerStatus[i] = "Not in library";
+                    didWork = true;
                 }
             }
         }
 
-        // restocking shelves if free
+        // Restocking shelves randomly if free
         if (!didWork) {
-            for (int i = 0; i < NUMBER_OF_SHELVES && !didWork; i++) {
-                lock_guard<mutex> lock(shelvesMutex[i]);
-                if (!shelves[i].isOccupied) {
-                    for (const auto& genre : genres) {
-                        if (shelves[i].booksPerGenre[genre] < MAX_BOOKS_PER_GENRE) {
-                            librarianStatus[id] = "Restocking shelf " + to_string(i + 1) + " with genre " + genre;
-                            shelves[i].booksPerGenre[genre]++;
-                            totalBooks++;
-                            didWork = true;
-                            sleep(1);
-                            break; // Break the inner loop since the librarian has restocked one book
-                        }
-                    }
-                }
+            int randomShelf = rand() % NUMBER_OF_SHELVES;
+            string randomGenre = genres[rand() % genres.size()];
+
+            lock_guard<mutex> lock(shelvesMutex[randomShelf]);
+            if (shelves[randomShelf].booksPerGenre[randomGenre] < MAX_BOOKS_PER_GENRE) {
+                librarianStatus[id] = "Restocking shelf " + to_string(randomShelf + 1) + " with genre " + randomGenre;
+                shelves[randomShelf].booksPerGenre[randomGenre]++;
+                totalBooks++;
+                didWork = true;
+                sleep(1);
             }
         }
     }
 }
 
 
-void reader(int id) {
-    // sleep(rand() % 3 + 1);
 
+void reader(int id) {
     while (running) {
         readerStatus[id] = "Looking for books";
         sleep(rand() % 3 + 1);
@@ -119,8 +115,7 @@ void reader(int id) {
             bool foundBook = false;
             for (int i = 0; i < NUMBER_OF_SHELVES && !foundBook; i++) {
                 lock_guard<mutex> lock(shelvesMutex[i]);
-                if (!shelves[i].isOccupied && shelves[i].booksPerGenre[genre] > 0) {
-                    shelves[i].isOccupied = true;
+                if (shelves[i].booksPerGenre[genre] > 0) {
                     shelves[i].booksPerGenre[genre]--;
                     foundBook = true;
                     shelfIndices.push_back(i);
@@ -136,10 +131,11 @@ void reader(int id) {
             readerStatus[id] = "Waiting for librarian";
             sleep(5);
 
-            // Mark the shelves as unoccupied
+            // Return the books to the shelves
             for (int index : shelfIndices) {
                 lock_guard<mutex> lock(shelvesMutex[index]);
-                shelves[index].isOccupied = false;
+                shelves[index].booksPerGenre[genresToRent[rand() % genresToRent.size()]]++;
+                totalBooks++;
             }
         } else {
             readerStatus[id] = "Didn't find all books";
@@ -147,17 +143,6 @@ void reader(int id) {
             readerStatus[id] = "Not in library";
             sleep(rand() % 3 + 1);
             continue;
-        }
-
-        // Randomly decide if this reader will return a book
-        if (rand() % 2 == 0 && foundAllBooks) {
-            readerStatus[id] = "Returning books";
-            for (int index : shelfIndices) {
-                lock_guard<mutex> lock(shelvesMutex[index]);
-                shelves[index].booksPerGenre[genresToRent[rand() % genresToRent.size()]]++;
-                totalBooks++;
-            }
-            sleep(1);
         }
     }
 }
@@ -194,13 +179,20 @@ void monitoring() {
         attron(COLOR_PAIR(6));
         printw("Shelves Status:\n");
         attroff(COLOR_PAIR(6));
+
+        // Display shelves header
         for (size_t i = 0; i < shelves.size(); i++) {
-            attron(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1));
-            printw("Shelf %ld: %s\n", i + 1, shelves[i].isOccupied ? "Occupied" : "Free");
-            for (const auto& genre : genres) {
-                printw("   %s: %d books\n", genre.c_str(), shelves[i].booksPerGenre[genre]);
+            printw("| %-12s", ("Shelf " + to_string(i + 1)).c_str());
+        }
+        printw("|\n");
+
+        for (const auto& genre : genres) {
+            for (size_t i = 0; i < shelves.size(); i++) {
+                attron(COLOR_PAIR(1)); // Display all shelves with the same color
+                printw("| %s: %-2d ", genre.c_str(), shelves[i].booksPerGenre[genre]);
+                attroff(COLOR_PAIR(1));
             }
-            attroff(COLOR_PAIR(shelves[i].isOccupied ? 2 : 1));
+            printw("|\n");
         }
 
         attron(COLOR_PAIR(6));
@@ -234,6 +226,7 @@ void monitoring() {
 
     endwin();
 }
+
 
 
 int main() {
