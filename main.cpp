@@ -19,18 +19,47 @@ const int INITIAL_BOOKS_PER_GENRE = 2;
 const int MAX_BOOKS_PER_GENRE = 5;
 const int SIMULATION_TIME_SECONDS = 30;
 
-vector<string> genres = {"Fiction", "Non-fiction", "Sci-Fi", "Fantasy", "Romance", "Horror"};
+vector<string> genres = {"Fiction", "Non-fict.", "Sci-Fi", "Fantasy", "Romance", "Horror"};
+
+struct Book {
+    string title;
+    string author;
+    string genre;
+    int ratingSum = 0;  // sum of ratings
+    int ratingCount = 0; // count of ratings
+};
 
 struct Shelf {
-    unordered_map<string, int> booksPerGenre;
+    unordered_map<string, vector<Book>> booksPerGenre;
+    
     Shelf() {
-        for (const auto& genre : genres) {
-            booksPerGenre[genre] = INITIAL_BOOKS_PER_GENRE;
-        }
+        // Adding Sample books to Fiction genre
+        booksPerGenre["Fiction"].push_back({"The Great Gatsby", "F. Scott Fitzgerald", "Fiction", 0, 0});
+        booksPerGenre["Fiction"].push_back({"To Kill a Mockingbird", "Harper Lee", "Fiction", 0, 0});
+
+        // Adding Sample books to Non-fict. genre
+        booksPerGenre["Non-fict."].push_back({"The Immortal Life of Henrietta Lacks", "Rebecca Skloot", "Non-fict.", 0, 0});
+        booksPerGenre["Non-fict."].push_back({"In Cold Blood", "Truman Capote", "Non-fict.", 0, 0});
+
+        // Adding Sample books to Sci-Fi genre
+        booksPerGenre["Sci-Fi"].push_back({"Dune", "Frank Herbert", "Sci-Fi", 0, 0});
+        booksPerGenre["Sci-Fi"].push_back({"Neuromancer", "William Gibson", "Sci-Fi", 0, 0});
+
+        // Adding Sample books to Fantasy genre
+        booksPerGenre["Fantasy"].push_back({"Harry Potter and the Sorcerer's Stone", "J.K. Rowling", "Fantasy", 0, 0});
+        booksPerGenre["Fantasy"].push_back({"The Hobbit", "J.R.R. Tolkien", "Fantasy", 0, 0});
+
+        // Adding Sample books to Romance genre
+        booksPerGenre["Romance"].push_back({"Pride and Prejudice", "Jane Austen", "Romance", 0, 0});
+        booksPerGenre["Romance"].push_back({"Outlander", "Diana Gabaldon", "Romance", 0, 0});
+
+        // Adding Sample books to Horror genre
+        booksPerGenre["Horror"].push_back({"Dracula", "Bram Stoker", "Horror", 0, 0});
+        booksPerGenre["Horror"].push_back({"The Shining", "Stephen King", "Horror", 0, 0});
     }
 };
 
-atomic<int> totalBooks(NUMBER_OF_SHELVES * genres.size() * INITIAL_BOOKS_PER_GENRE);
+atomic<int> totalBooks(NUMBER_OF_SHELVES * 2 * genres.size());
 
 bool running = true;
 
@@ -43,6 +72,16 @@ mutex shelvesMutex[NUMBER_OF_SHELVES];
 mutex computerStationsMutex;
 
 atomic<int> readersWhoDidntFindBooks(0);
+
+// A map of genres to a list of books and authors
+unordered_map<string, vector<pair<string, string>>> booksDatabase = {
+    {"Fiction", {{"The Great Gatsby", "F. Scott Fitzgerald"}, {"Pride and Prejudice", "Jane Austen"}}},
+    {"Non-fict.", {{"Sapiens", "Yuval Noah Harari"}, {"Educated", "Tara Westover"}}},
+    {"Sci-Fi", {{"Dune", "Frank Herbert"}, {"Neuromancer", "William Gibson"}}},
+    {"Fantasy", {{"Harry Potter", "J.K. Rowling"}, {"Lord of the Rings", "J.R.R. Tolkien"}}},
+    {"Romance", {{"Pride and Prejudice", "Jane Austen"}, {"Outlander", "Diana Gabaldon"}}},
+    {"Horror", {{"Dracula", "Bram Stoker"}, {"The Shining", "Stephen King"}}}
+};
 
 void librarian(int id) {
     while (running) {
@@ -77,19 +116,62 @@ void librarian(int id) {
                     readerStatus[i] = "Not in library";
                     didWork = true;
                 }
+            } else if (readerStatus[i] == "Returning book") {
+                bool usingComputer = false;
+
+                {
+                    lock_guard<mutex> lock(computerStationsMutex);
+                    if (computerStationsOccupied < NUMBER_OF_COMPUTER_STATIONS) {
+                        computerStationsOccupied++;
+                        usingComputer = true;
+                        readerStatus[i] = "Being helped";
+                    }
+                }
+
+                if (usingComputer) {
+                    librarianStatus[id] = "Processing returned book from reader " + to_string(i + 1);
+                    sleep(rand() % 2 + 1);
+
+                    // Simulating updating rating for the returned book
+                    int randomShelf = rand() % NUMBER_OF_SHELVES;
+                    string randomGenre = genres[rand() % genres.size()];
+                    lock_guard<mutex> lock(shelvesMutex[randomShelf]);
+                    if (!shelves[randomShelf].booksPerGenre[randomGenre].empty()) {
+                        shelves[randomShelf].booksPerGenre[randomGenre][0].ratingSum += rand() % 5 + 1;  // Simulate rating from 1 to 5
+                        shelves[randomShelf].booksPerGenre[randomGenre][0].ratingCount += 1;
+                    }
+
+                    {
+                        lock_guard<mutex> lock(computerStationsMutex);
+                        computerStationsOccupied--;
+                    }
+
+                    librarianStatus[id] = "Free";
+                    readerStatus[i] = "Not in library";
+                    sleep(2);
+                    didWork = true;
+                }
             }
         }
 
-        // Restocking shelves randomly if free
+        // Restocking shelves randomly if free (librarian could bring new books from storage)
         if (!didWork) {
             int randomShelf = rand() % NUMBER_OF_SHELVES;
             string randomGenre = genres[rand() % genres.size()];
 
             lock_guard<mutex> lock(shelvesMutex[randomShelf]);
-            if (shelves[randomShelf].booksPerGenre[randomGenre] < MAX_BOOKS_PER_GENRE && rand() % 2) {
+            if (shelves[randomShelf].booksPerGenre[randomGenre].size() < MAX_BOOKS_PER_GENRE && rand() % 2) {
                 librarianStatus[id] = "Restocking shelf " + to_string(randomShelf + 1) + " with genre " + randomGenre;
-                shelves[randomShelf].booksPerGenre[randomGenre]++;
+
+                // Select a random book from the book database of the given genre
+                int bookIndex = rand() % booksDatabase[randomGenre].size();
+                string bookTitle = booksDatabase[randomGenre][bookIndex].first;
+                string bookAuthor = booksDatabase[randomGenre][bookIndex].second;
+
+                // Add the selected book to the shelf
+                shelves[randomShelf].booksPerGenre[randomGenre].push_back({bookTitle, bookAuthor, randomGenre, 0, 0});
                 totalBooks++;
+
                 didWork = true;
                 sleep(1);
             }
@@ -99,30 +181,33 @@ void librarian(int id) {
 
 
 
+
 void reader(int id) {
     while (running) {
         readerStatus[id] = "Looking for books";
         sleep(rand() % 3 + 1);
 
-        // Create a map to store genres and the number of books the reader wants to rent
+        // The reader chooses genres they are interested in
         unordered_map<string, int> booksToRent;
         for (int i = 0; i < rand() % genres.size(); ++i) {
-            booksToRent[genres[rand() % genres.size()]] = rand() % 5 + 1;
+            booksToRent[genres[rand() % genres.size()]] = rand() % 2 + 1;
         }
 
         bool foundAllBooks = true;
-        vector<pair<int, string>> shelfIndices;
+        vector<pair<int, pair<string, string>>> booksTaken;
 
         for (const auto& [genre, numBooks] : booksToRent) {
             int foundBooks = 0;
             // Loop through shelves to find the books
             for (int i = 0; i < NUMBER_OF_SHELVES && foundBooks < numBooks; i++) {
                 lock_guard<mutex> lock(shelvesMutex[i]);
+                auto &books = shelves[i].booksPerGenre[genre];
                 // Loop to find the number of copies the reader needs
-                while (shelves[i].booksPerGenre[genre] > 0 && foundBooks < numBooks) {
-                    shelves[i].booksPerGenre[genre]--;
+                while (!books.empty() && foundBooks < numBooks) {
+                    auto book = books.back();
+                    books.pop_back();
+                    booksTaken.push_back({i, {book.title, book.genre}});
                     foundBooks++;
-                    shelfIndices.push_back({i, genre});
                 }
             }
             if (foundBooks < numBooks) {
@@ -135,11 +220,18 @@ void reader(int id) {
             readerStatus[id] = "Waiting for librarian";
             sleep(5);
 
-            // Return the books to the shelves
-            for (auto [index, genre] : shelfIndices) {
+            // Return the books to the shelves and give feedback (rating)
+            for (auto [index, book] : booksTaken) {
                 lock_guard<mutex> lock(shelvesMutex[index]);
-                shelves[index].booksPerGenre[genre]++;
-                totalBooks++;
+                auto &books = shelves[index].booksPerGenre[book.second];
+                for (auto &b : books) {
+                    if (b.title == book.first) {
+                        // Simulate reader feedback by generating a random rating
+                        b.ratingSum += rand() % 5 + 1;
+                        b.ratingCount++;
+                        break;
+                    }
+                }
             }
         } else {
             readerStatus[id] = "Didn't find all books";
@@ -210,23 +302,27 @@ void monitoring() {
 
         // Display shelves status
         attron(COLOR_PAIR(6));
-        printw("Shelves Status:\n");
+        printw("\nShelves Status:\n");
         attroff(COLOR_PAIR(6));
 
         // Display shelves header
         for (size_t i = 0; i < shelves.size(); i++) {
-            printw("| %-12s", ("Shelf " + to_string(i + 1)).c_str());
+            printw("| %-16s", ("Shelf " + to_string(i + 1)).c_str());
         }
         printw("|\n");
 
         for (const auto& genre : genres) {
             for (size_t i = 0; i < shelves.size(); i++) {
                 attron(COLOR_PAIR(1)); // Display all shelves with the same color
-                printw("| %s: %-2d ", genre.c_str(), shelves[i].booksPerGenre[genre]);
+                // Get the count of books in this genre on this shelf
+                int bookCount = shelves[i].booksPerGenre[genre].size();
+                printw("| %-10s: %-3d ", genre.c_str(), bookCount);
                 attroff(COLOR_PAIR(1));
             }
             printw("|\n");
         }
+
+
 
         // Display computer stations status
         attron(COLOR_PAIR(6));
