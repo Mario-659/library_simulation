@@ -1,3 +1,4 @@
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -83,6 +84,32 @@ unordered_map<string, vector<pair<string, string>>> booksDatabase = {
     {"Horror", {{"Dracula", "Bram Stoker"}, {"The Shining", "Stephen King"}}}
 };
 
+
+
+mutex eventsMutex;
+deque<string> recentEvents;
+
+void logEvent(const string &event) {
+    lock_guard<mutex> lock(eventsMutex);
+
+    time_t rawTime;
+    struct tm *timeInfo;
+    char buffer[80];
+
+    time(&rawTime);
+    timeInfo = localtime(&rawTime);
+
+    strftime(buffer, sizeof(buffer), "%H:%M:%S", timeInfo);
+    string strTime(buffer);
+
+    if (recentEvents.size() >= 10) {
+        recentEvents.pop_front();
+    }
+
+    recentEvents.push_back(strTime + " - " + event);
+}
+
+
 void librarian(int id) {
     while (running) {
         bool didWork = false;
@@ -105,6 +132,10 @@ void librarian(int id) {
                     librarianStatus[id] = "Checking out book for reader " + to_string(i + 1);
                     sleep(rand() % 2 + 1);
 
+                    stringstream logMessage;
+                    logMessage << "Librarian " << (id + 1) << " is checking out book for reader " << (i + 1);
+                    logEvent(logMessage.str());
+
                     {
                         lock_guard<mutex> lock(computerStationsMutex);
                         computerStationsOccupied--;
@@ -112,6 +143,11 @@ void librarian(int id) {
 
                     librarianStatus[id] = "Free";
                     readerStatus[i] = "Leaving with book";
+
+                    logMessage.str("");
+                    logMessage << "Reader " << (i + 1) << " is leaving with book";
+                    logEvent(logMessage.str());
+
                     sleep(2);
                     readerStatus[i] = "Not in library";
                     didWork = true;
@@ -130,14 +166,18 @@ void librarian(int id) {
 
                 if (usingComputer) {
                     librarianStatus[id] = "Processing returned book from reader " + to_string(i + 1);
+
+                    stringstream logMessage;
+                    logMessage << "Librarian " << (id) << " is processing returned book from reader " << (i + 1);
+                    logEvent(logMessage.str());
+
                     sleep(rand() % 2 + 1);
 
-                    // Simulating updating rating for the returned book
                     int randomShelf = rand() % NUMBER_OF_SHELVES;
                     string randomGenre = genres[rand() % genres.size()];
                     lock_guard<mutex> lock(shelvesMutex[randomShelf]);
                     if (!shelves[randomShelf].booksPerGenre[randomGenre].empty()) {
-                        shelves[randomShelf].booksPerGenre[randomGenre][0].ratingSum += rand() % 5 + 1;  // Simulate rating from 1 to 5
+                        shelves[randomShelf].booksPerGenre[randomGenre][0].ratingSum += rand() % 5 + 1;
                         shelves[randomShelf].booksPerGenre[randomGenre][0].ratingCount += 1;
                     }
 
@@ -153,8 +193,7 @@ void librarian(int id) {
                 }
             }
         }
-
-        // Restocking shelves randomly if free (librarian could bring new books from storage)
+        
         if (!didWork) {
             int randomShelf = rand() % NUMBER_OF_SHELVES;
             string randomGenre = genres[rand() % genres.size()];
@@ -162,6 +201,10 @@ void librarian(int id) {
             lock_guard<mutex> lock(shelvesMutex[randomShelf]);
             if (shelves[randomShelf].booksPerGenre[randomGenre].size() < MAX_BOOKS_PER_GENRE && rand() % 2) {
                 librarianStatus[id] = "Restocking shelf " + to_string(randomShelf + 1) + " with genre " + randomGenre;
+                
+                stringstream logMessage;
+                logMessage << "Librarian " << (id + 1) << " is restocking shelf " << (randomShelf + 1) << " with genre " << randomGenre;
+                logEvent(logMessage.str());
 
                 // Select a random book from the book database of the given genre
                 int bookIndex = rand() % booksDatabase[randomGenre].size();
@@ -180,8 +223,6 @@ void librarian(int id) {
 }
 
 
-
-
 void reader(int id) {
     while (running) {
         readerStatus[id] = "Looking for books";
@@ -192,6 +233,11 @@ void reader(int id) {
         for (int i = 0; i < rand() % genres.size(); ++i) {
             booksToRent[genres[rand() % genres.size()]] = rand() % 2 + 1;
         }
+
+        stringstream logMessage;
+        logMessage << "Reader " << (id) << " wants to rent " << booksToRent.size() << " books";
+        logEvent(logMessage.str());
+
 
         bool foundAllBooks = true;
         vector<pair<int, pair<string, string>>> booksTaken;
@@ -235,6 +281,11 @@ void reader(int id) {
             }
         } else {
             readerStatus[id] = "Didn't find all books";
+            
+            stringstream logMessage;
+            logMessage << "Reader " << (id) << " didn't find all books";
+            logEvent(logMessage.str());
+
             sleep(2);
             readerStatus[id] = "Not in library";
             readersWhoDidntFindBooks++;
@@ -350,6 +401,18 @@ void monitoring() {
             attron(COLOR_PAIR(5));
             printw("Reader %ld: %s\n", i + 1, readerStatus[i].c_str());
             attroff(COLOR_PAIR(5));
+        }
+
+        // Display recent events
+        attron(COLOR_PAIR(6));
+        printw("\nRecent Events:\n");
+        attroff(COLOR_PAIR(6));
+
+        lock_guard<mutex> lock(eventsMutex);
+        for (const auto &event : recentEvents) {
+            attron(COLOR_PAIR(1));
+            printw("%s\n", event.c_str());
+            attroff(COLOR_PAIR(1));
         }
 
         refresh();
