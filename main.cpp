@@ -266,14 +266,32 @@ void reader(int id) {
             readerStatus[id] = "Waiting for librarian";
             sleep(5);
 
-            // Return the books to the shelves and give feedback (rating)
+            stringstream logMessage;
+            logMessage << "Reader " << id << " has taken books: ";
+            for (auto& [_, book] : booksTaken) {
+                logMessage << book.first << ", ";
+            }
+            logEvent(logMessage.str());
+            logMessage.str("");
+
+            readerStatus[id] = "Reading books";
+
+            sleep(rand() % 5 + 1);
+
+            readerStatus[id] = "Returning book";
+            
+
+            logMessage << "Reader " << id << " is returning books";
+            logEvent(logMessage.str());
+            logMessage.str("");
+
             for (auto [index, book] : booksTaken) {
                 lock_guard<mutex> lock(shelvesMutex[index]);
                 auto &books = shelves[index].booksPerGenre[book.second];
                 for (auto &b : books) {
                     if (b.title == book.first) {
-                        // Simulate reader feedback by generating a random rating
-                        b.ratingSum += rand() % 5 + 1;
+                        int rating = rand() % 5 + 1;
+                        b.ratingSum += rating;
                         b.ratingCount++;
                         break;
                     }
@@ -281,7 +299,7 @@ void reader(int id) {
             }
         } else {
             readerStatus[id] = "Didn't find all books";
-            
+
             stringstream logMessage;
             logMessage << "Reader " << (id) << " didn't find all books";
             logEvent(logMessage.str());
