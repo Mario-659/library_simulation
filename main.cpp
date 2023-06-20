@@ -26,35 +26,29 @@ struct Book {
     string title;
     string author;
     string genre;
-    int ratingSum = 0;  // sum of ratings
-    int ratingCount = 0; // count of ratings
+    int ratingSum = 0;
+    int ratingCount = 0;
 };
 
 struct Shelf {
     unordered_map<string, vector<Book>> booksPerGenre;
     
     Shelf() {
-        // Adding Sample books to Fiction genre
         booksPerGenre["Fiction"].push_back({"The Great Gatsby", "F. Scott Fitzgerald", "Fiction", 0, 0});
         booksPerGenre["Fiction"].push_back({"To Kill a Mockingbird", "Harper Lee", "Fiction", 0, 0});
 
-        // Adding Sample books to Non-fict. genre
         booksPerGenre["Non-fict."].push_back({"The Immortal Life of Henrietta Lacks", "Rebecca Skloot", "Non-fict.", 0, 0});
         booksPerGenre["Non-fict."].push_back({"In Cold Blood", "Truman Capote", "Non-fict.", 0, 0});
 
-        // Adding Sample books to Sci-Fi genre
         booksPerGenre["Sci-Fi"].push_back({"Dune", "Frank Herbert", "Sci-Fi", 0, 0});
         booksPerGenre["Sci-Fi"].push_back({"Neuromancer", "William Gibson", "Sci-Fi", 0, 0});
 
-        // Adding Sample books to Fantasy genre
         booksPerGenre["Fantasy"].push_back({"Harry Potter and the Sorcerer's Stone", "J.K. Rowling", "Fantasy", 0, 0});
         booksPerGenre["Fantasy"].push_back({"The Hobbit", "J.R.R. Tolkien", "Fantasy", 0, 0});
 
-        // Adding Sample books to Romance genre
         booksPerGenre["Romance"].push_back({"Pride and Prejudice", "Jane Austen", "Romance", 0, 0});
         booksPerGenre["Romance"].push_back({"Outlander", "Diana Gabaldon", "Romance", 0, 0});
 
-        // Adding Sample books to Horror genre
         booksPerGenre["Horror"].push_back({"Dracula", "Bram Stoker", "Horror", 0, 0});
         booksPerGenre["Horror"].push_back({"The Shining", "Stephen King", "Horror", 0, 0});
     }
@@ -114,7 +108,7 @@ void librarian(int id) {
     while (running) {
         bool didWork = false;
 
-        // Checking for readers that are waiting for help
+        // checking for readers that are waiting for help
         for (int i = 0; i < NUMBER_OF_READERS && !didWork; i++) {
             if (readerStatus[i] == "Waiting for librarian") {
                 bool usingComputer = false;
@@ -206,12 +200,12 @@ void librarian(int id) {
                 logMessage << "Librarian " << (id + 1) << " is restocking shelf " << (randomShelf + 1) << " with genre " << randomGenre;
                 logEvent(logMessage.str());
 
-                // Select a random book from the book database of the given genre
+                // select a random book from the book database of the given genre
                 int bookIndex = rand() % booksDatabase[randomGenre].size();
                 string bookTitle = booksDatabase[randomGenre][bookIndex].first;
                 string bookAuthor = booksDatabase[randomGenre][bookIndex].second;
 
-                // Add the selected book to the shelf
+                // add the selected book to the shelf
                 shelves[randomShelf].booksPerGenre[randomGenre].push_back({bookTitle, bookAuthor, randomGenre, 0, 0});
                 totalBooks++;
 
@@ -228,7 +222,6 @@ void reader(int id) {
         readerStatus[id] = "Looking for books";
         sleep(rand() % 3 + 1);
 
-        // The reader chooses genres they are interested in
         unordered_map<string, int> booksToRent;
         for (int i = 0; i < rand() % genres.size(); ++i) {
             booksToRent[genres[rand() % genres.size()]] = rand() % 2 + 1;
@@ -248,11 +241,10 @@ void reader(int id) {
 
         for (const auto& [genre, numBooks] : booksToRent) {
             int foundBooks = 0;
-            // Loop through shelves to find the books
+            // loop through shelves to find the books
             for (int i = 0; i < NUMBER_OF_SHELVES && foundBooks < numBooks; i++) {
                 lock_guard<mutex> lock(shelvesMutex[i]);
                 auto &books = shelves[i].booksPerGenre[genre];
-                // Loop to find the number of copies the reader needs
                 while (!books.empty() && foundBooks < numBooks) {
                     auto book = books.back();
                     books.pop_back();
@@ -308,7 +300,7 @@ void reader(int id) {
             logMessage << "Reader " << (id) << " is returning partial books";
             logEvent(logMessage.str());
 
-            // Return the books that were taken
+            // return the books that were taken
             for (auto [index, book] : booksTaken) {
                 lock_guard<mutex> lock(shelvesMutex[index]);
                 shelves[index].booksPerGenre[book.second].push_back({book.first, book.second, 0, 0});
@@ -400,8 +392,6 @@ void monitoring() {
             }
             printw("|\n");
         }
-
-
 
         // Display computer stations status
         attron(COLOR_PAIR(6));
