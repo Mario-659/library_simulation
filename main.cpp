@@ -235,7 +235,11 @@ void reader(int id) {
         }
 
         stringstream logMessage;
-        logMessage << "Reader " << (id) << " wants to rent " << booksToRent.size() << " books";
+        int totalBooks = 0;
+        for (const auto& [genre, numBooks] : booksToRent) {
+            totalBooks += numBooks;
+        }
+        logMessage << "Reader " << (id) << " wants to rent " << totalBooks << " books";
         logEvent(logMessage.str());
 
 
