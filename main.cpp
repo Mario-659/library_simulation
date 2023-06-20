@@ -66,7 +66,7 @@ int computerStationsOccupied = 0;
 mutex shelvesMutex[NUMBER_OF_SHELVES];
 mutex computerStationsMutex;
 
-atomic<int> readersWhoDidntFindBooks(0);
+atomic<int> readersWhoDidntFindBooks(20);
 
 // A map of genres to a list of books and authors
 unordered_map<string, vector<pair<string, string>>> booksDatabase = {
@@ -296,15 +296,16 @@ void reader(int id) {
         } else {
             readerStatus[id] = "Returning partial books";
 
-            stringstream logMessage;
-            logMessage << "Reader " << (id) << " is returning partial books";
-            logEvent(logMessage.str());
+            // TODO the logic below is causing an exception
+            // stringstream logMessage;
+            // logMessage << "Reader " << (id) << " is returning partial books";
+            // logEvent(logMessage.str());
 
-            // return the books that were taken
-            for (auto [index, book] : booksTaken) {
-                lock_guard<mutex> lock(shelvesMutex[index]);
-                shelves[index].booksPerGenre[book.second].push_back({book.first, book.second, 0, 0});
-            }
+            // // return the books that were taken
+            // for (auto [index, book] : booksTaken) {
+            //     lock_guard<mutex> lock(shelvesMutex[index]);
+            //     shelves[index].booksPerGenre[book.second].push_back({book.first, book.second, 0, 0});
+            // }
 
             sleep(2);
             readerStatus[id] = "Not in library";
