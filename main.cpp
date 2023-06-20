@@ -298,11 +298,17 @@ void reader(int id) {
                 }
             }
         } else {
-            readerStatus[id] = "Didn't find all books";
+            readerStatus[id] = "Returning partial books";
 
             stringstream logMessage;
-            logMessage << "Reader " << (id) << " didn't find all books";
+            logMessage << "Reader " << (id) << " is returning partial books";
             logEvent(logMessage.str());
+
+            // Return the books that were taken
+            for (auto [index, book] : booksTaken) {
+                lock_guard<mutex> lock(shelvesMutex[index]);
+                shelves[index].booksPerGenre[book.second].push_back({book.first, book.second, 0, 0});
+            }
 
             sleep(2);
             readerStatus[id] = "Not in library";
